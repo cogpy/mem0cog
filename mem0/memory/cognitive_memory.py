@@ -328,7 +328,8 @@ class CognitiveMemoryManager:
         with self.processing_lock:
             for memory_type in memory_types:
                 search_kwargs = kwargs.copy()
-                search_kwargs["memory_type"] = memory_type.value
+                # Remove memory_type from kwargs to avoid conflict
+                search_kwargs.pop("memory_type", None)
                 
                 future = self.executor.submit(
                     self._search_memory_layer,
