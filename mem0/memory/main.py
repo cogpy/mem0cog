@@ -9,17 +9,18 @@ import uuid
 import warnings
 from copy import deepcopy
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import pytz
 from pydantic import ValidationError
 
 from mem0.configs.base import MemoryConfig, MemoryItem
-from mem0.configs.enums import MemoryType
+from mem0.configs.enums import MemoryType, CognitiveSynergyType, MemoryLayerPriority
 from mem0.configs.prompts import (
     PROCEDURAL_MEMORY_SYSTEM_PROMPT,
     get_update_memory_messages,
 )
+from mem0.memory.cognitive_memory import CognitiveMemoryManager, CognitiveContext
 from mem0.exceptions import ValidationError as Mem0ValidationError
 from mem0.memory.base import MemoryBase
 from mem0.memory.setup import mem0_dir, setup_config
@@ -197,6 +198,14 @@ class Memory(MemoryBase):
             )
 
         self.enable_graph = False
+
+        # Initialize cognitive memory manager for OpenCog integration
+        self.enable_cognitive_synergy = getattr(config, 'enable_cognitive_synergy', True)
+        if self.enable_cognitive_synergy:
+            self.cognitive_manager = CognitiveMemoryManager(self, config.__dict__)
+            logger.info("Cognitive synergy enabled with OpenCog architecture")
+        else:
+            self.cognitive_manager = None
 
         if self.config.graph_store.config:
             provider = self.config.graph_store.provider
@@ -382,6 +391,200 @@ class Memory(MemoryBase):
             }
 
         return {"results": vector_store_result}
+
+    def add_with_cognitive_synergy(
+        self,
+        messages,
+        *,
+        user_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        run_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        memory_types: Optional[List[MemoryType]] = None,
+        cognitive_context: Optional[CognitiveContext] = None,
+        **kwargs
+    ):
+        """
+        Add memory with cognitive synergy across parallel memory layers.
+        
+        This method leverages OpenCog-inspired cognitive architecture to process
+        memories across multiple layers (working, semantic, episodic, procedural)
+        with synergy integration for enhanced context-aware memory management.
+        
+        Args:
+            messages: The message content or list of messages
+            user_id: ID of the user creating the memory
+            agent_id: ID of the agent creating the memory
+            run_id: ID of the run creating the memory
+            metadata: Additional metadata to store with the memory
+            memory_types: List of memory types to process (auto-inferred if None)
+            cognitive_context: Cognitive context for processing (auto-created if None)
+            **kwargs: Additional arguments passed to memory processing
+            
+        Returns:
+            dict: Results including memory additions and synergy activations
+        """
+        if not self.enable_cognitive_synergy or not self.cognitive_manager:
+            # Fallback to standard memory processing
+            return self.add(
+                messages,
+                user_id=user_id,
+                agent_id=agent_id,
+                run_id=run_id,
+                metadata=metadata,
+                **kwargs
+            )
+        
+        # Create or get cognitive context
+        if cognitive_context is None:
+            session_id = user_id or agent_id or run_id
+            cognitive_context = CognitiveContext(
+                user_id=session_id,
+                session_id=f"{session_id}_{run_id}" if run_id else session_id
+            )
+        
+        # Register cognitive context
+        self.cognitive_manager.register_cognitive_context(cognitive_context)
+        
+        # Process with cognitive synergy
+        return self.cognitive_manager.add_memory_with_cognitive_synergy(
+            content=messages,
+            user_id=cognitive_context.user_id,
+            memory_types=memory_types,
+            context=cognitive_context,
+            metadata=metadata,
+            **kwargs
+        )
+
+    def search_with_cognitive_synergy(
+        self,
+        query: str,
+        *,
+        user_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        run_id: Optional[str] = None,
+        memory_types: Optional[List[MemoryType]] = None,
+        synergy_types: Optional[List[CognitiveSynergyType]] = None,
+        cognitive_context: Optional[CognitiveContext] = None,
+        **kwargs
+    ):
+        """
+        Search memories with cognitive synergy across multiple layers.
+        
+        This method searches across parallel memory layers and applies cognitive
+        synergy to enhance retrieval relevance and context-awareness.
+        
+        Args:
+            query: Search query string
+            user_id: ID of the user for scoping the search
+            agent_id: ID of the agent for scoping the search
+            run_id: ID of the run for scoping the search
+            memory_types: List of memory types to search
+            synergy_types: List of synergy types to apply
+            cognitive_context: Cognitive context for search
+            **kwargs: Additional search parameters
+            
+        Returns:
+            dict: Search results with layer information and synergy scores
+        """
+        if not self.enable_cognitive_synergy or not self.cognitive_manager:
+            # Fallback to standard search
+            return self.search(query, user_id=user_id, agent_id=agent_id, run_id=run_id, **kwargs)
+        
+        # Create or get cognitive context
+        if cognitive_context is None:
+            session_id = user_id or agent_id or run_id
+            cognitive_context = CognitiveContext(
+                user_id=session_id,
+                session_id=f"{session_id}_{run_id}" if run_id else session_id,
+                attention_focus=[query]  # Use query as attention focus
+            )
+        
+        # Process search with cognitive synergy
+        return self.cognitive_manager.search_with_cognitive_synergy(
+            query=query,
+            user_id=cognitive_context.user_id,
+            memory_types=memory_types,
+            synergy_types=synergy_types,
+            context=cognitive_context,
+            **kwargs
+        )
+
+    def get_cognitive_state(self, user_id: Optional[str] = None, agent_id: Optional[str] = None, run_id: Optional[str] = None):
+        """
+        Get the current cognitive state of the memory system.
+        
+        Args:
+            user_id: ID of the user
+            agent_id: ID of the agent
+            run_id: ID of the run
+            
+        Returns:
+            dict: Cognitive state information including layer states and synergy activations
+        """
+        if not self.enable_cognitive_synergy or not self.cognitive_manager:
+            return {"cognitive_synergy_enabled": False, "message": "Cognitive synergy is disabled"}
+        
+        session_id = user_id or agent_id or run_id
+        if not session_id:
+            return {"error": "At least one of user_id, agent_id, or run_id must be provided"}
+        
+        return self.cognitive_manager.get_cognitive_state(session_id)
+
+    def set_cognitive_context(
+        self,
+        user_id: str,
+        *,
+        session_id: Optional[str] = None,
+        domain: Optional[str] = None,
+        attention_focus: Optional[List[str]] = None,
+        emotional_state: Optional[str] = None,
+        cognitive_load: Optional[float] = None,
+        active_goals: Optional[List[str]] = None
+    ):
+        """
+        Set or update cognitive context for a user.
+        
+        Args:
+            user_id: ID of the user
+            session_id: Session identifier
+            domain: Domain context (e.g., "healthcare", "education")
+            attention_focus: List of current attention focus items
+            emotional_state: Current emotional state
+            cognitive_load: Cognitive load level (0.0 to 1.0)
+            active_goals: List of active goals
+            
+        Returns:
+            dict: Status of context update
+        """
+        if not self.enable_cognitive_synergy or not self.cognitive_manager:
+            return {"cognitive_synergy_enabled": False, "message": "Cognitive synergy is disabled"}
+        
+        context = CognitiveContext(
+            user_id=user_id,
+            session_id=session_id,
+            domain=domain,
+            attention_focus=attention_focus or [],
+            emotional_state=emotional_state,
+            cognitive_load=cognitive_load if cognitive_load is not None else 0.5,
+            active_goals=active_goals or []
+        )
+        
+        self.cognitive_manager.register_cognitive_context(context)
+        
+        return {
+            "status": "success",
+            "message": f"Cognitive context updated for user {user_id}",
+            "context": {
+                "user_id": user_id,
+                "session_id": session_id,
+                "domain": domain,
+                "attention_focus": attention_focus,
+                "emotional_state": emotional_state,
+                "cognitive_load": cognitive_load,
+                "active_goals": active_goals
+            }
+        }
 
     def _add_to_vector_store(self, messages, metadata, filters, infer):
         if not infer:

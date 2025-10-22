@@ -64,6 +64,20 @@ class MemoryConfig(BaseModel):
         description="Custom prompt for the update memory",
         default=None,
     )
+    enable_cognitive_synergy: bool = Field(
+        description="Enable OpenCog-inspired cognitive synergy between memory layers",
+        default=True,
+    )
+    cognitive_synergy_config: Optional[Dict[str, Any]] = Field(
+        description="Configuration for cognitive synergy processing",
+        default_factory=lambda: {
+            "max_parallel_layers": 4,
+            "synergy_strength_threshold": 0.5,
+            "working_memory_capacity": 100,
+            "cross_layer_association_strength": 0.6,
+            "cognitive_load_adaptation": True
+        },
+    )
 
 
 class AzureConfig(BaseModel):
