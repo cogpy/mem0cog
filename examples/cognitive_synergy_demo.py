@@ -65,13 +65,13 @@ def healthcare_assistant_demo():
         "BMI over 30 is classified as obese and increases cardiovascular risk"
     ]
     
-    for knowledge in medical_knowledge:
+    for idx, knowledge in enumerate(medical_knowledge, start=1):
         result = memory.add_with_cognitive_synergy(
             knowledge,
             user_id="dr_johnson",
             memory_types=[MemoryType.SEMANTIC, MemoryType.WORKING]
         )
-        print(f"  ✓ Added: {knowledge[:50]}...")
+        print(f"  ✓ Medical knowledge item {idx} added.")
     
     # Add patient encounters (Episodic Memory)
     print("\n3. Adding patient encounters to episodic memory...")
